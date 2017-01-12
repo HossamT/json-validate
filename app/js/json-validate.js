@@ -180,7 +180,7 @@ function validator(jsSchema){
     this.checkArray = function (obj,e) {
         var type = self.getType(e);
         var options = type.options;
-        // var model = type.model;
+        var model = type.model;
         if(options){
             if(options.hasOwnProperty("minSize") && obj.length < options.minSize){
                 errUtil.arrMin(e.key,obj.length,options.min);
@@ -189,6 +189,14 @@ function validator(jsSchema){
                 errUtil.arrMax(e.key,obj.length,options.min);
             }
         }
+        if(model){
+            var elmBaseType = self.baseType(model);
+            for(var i in obj){
+                var elm = obj[i];
+                self.routeCheck(elmBaseType,elm,model);
+            }
+        }
+
     };
 }
 
@@ -250,12 +258,9 @@ var schema = {
 			options : {
 				minSize : 1
 			},
-            model : [
-				{
-					discriminator : null,
+            model : {
 					typeRef : "contact"
-				}
-			]
+            }
 		},
 
 		contact : {
