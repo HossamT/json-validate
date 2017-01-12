@@ -1,0 +1,42 @@
+{
+    "name": "json-validate",
+    "version": "0.0.1",
+    "title": "JSON Validate",
+    "appPath": "app",
+    "description": "AngularJS module for JSON Object Validation ",
+    "keywords": [
+        "json",
+        "validation",
+        "angularjs"
+    ],
+    "homepage": "https://github.com/HossamT/json-validate",
+    "author": {
+        "name": "Hossam Tamri"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git://github.com/HossamT/json-validate.git"
+    },
+    "bugs": "https://github.com/HossamT/json-validate/issues",
+    "dependencies": {
+        "jquery": ">=2.1.1"
+    },
+    "main": [
+        "app/css/json-validate",
+        "app/img/sprites.gif",
+        "app/js/json-validate"
+    ],
+    "ignore": [
+        "/*.*",
+        "**/.*",
+        "node_modules",
+        "bower_components",
+        "app/bower_components",
+        "test",
+        "tests"
+    ],
+    "authors": [
+        "Hossam Tamri <hossam.tamri@gmail.com>"
+    ],
+    "license": "MIT"
+}

@@ -1,0 +1,12 @@
+{
+    "name": "json-validate",
+    "version": "0.0.1",
+    "main": [
+        "app/css/json-validate",
+        "app/img/sprites.gif",
+        "app/js/json-validate"
+    ],
+    "dependencies": {
+        "jquery": ">=2.1.1"
+    }
+}
