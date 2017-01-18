@@ -19,12 +19,9 @@
     },
     "bugs": "https://github.com/HossamT/json-validate/issues",
     "dependencies": {
-        "jquery": ">=2.1.1"
     },
     "main": [
-        "app/css/json-validate",
-        "app/img/sprites.gif",
-        "app/js/json-validate"
+        "app/js/json-validate.js"
     ],
     "ignore": [
         "/*.*",
