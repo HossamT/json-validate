@@ -23,6 +23,9 @@
             this.specErrorTypeNotDEF = function (k) {
                 return k+" type not defined in spec";
             };
+            this.discriminator = function (k) {
+                return k+" has ambiguous or incomplete discriminator definition";
+            };
             this.unexpected = function (k) {
                 return k+" is unexpected";
             };
@@ -56,9 +59,12 @@
             this.arrMax = function(k,length,max){
                 return k+" must have at most "+max+" element but "+length+" was found";
             };
+            this.custom = function(x){
+                return x;
+            };
         }
 
-        //Resolve error type and params into error object in the list
+        // Resolve error type and params into error object in the list
         this.resolve = function (fctName,id) {
             if(~excluded.indexOf(fctName)){
                 return;
@@ -70,7 +76,7 @@
             };
 
             if(ids){
-                errobj.id = idList.join(separator)+id;
+                errobj.id = idList.join(separator)+separator+id;
             }
 
             if(arguments.length === 3){
@@ -112,7 +118,7 @@
             return "Undefined";
         };
 
-        // Get the definition of a type from its name
+        // Get the definition of a custom type from its name
         this.getTypeDef = function (name) {
             return jsSchema.types[name];
         };
@@ -129,24 +135,27 @@
                 return 'NDEF';
         };
 
+        // Loops Thru object
         this.loopThru = function (jsObj,model) {
             if(jsObj){
                 var list = [];
                 for(var element in model){
                     if(model.hasOwnProperty(element)){
-                        var e = model[element];
-                        var obj  = jsObj[e.key];
-                        list.push(e.key);
-                        var type = self.typeID(obj);
-                        var bType = self.baseType(e);
-                        if(self.checkType(bType,type,e)){
-                            self.routeCheck(jsObj,bType,obj,e);
+                        var e = self.resolveChoice(jsObj,model[element]);
+                        if(e !== null){
+                            var obj  = jsObj[e.key];
+                            list.push(e.key);
+                            var type = self.typeID(obj);
+                            var bType = self.baseType(e);
+                            if(self.checkType(bType,type,e)){
+                                self.routeCheck(jsObj,bType,obj,e);
+                            }
                         }
                     }
                 }
                 for(var k in jsObj){
                     if(list.indexOf(k) === -1 && jsObj.hasOwnProperty(k)){
-                        self.resolve("unexpected",e.id,k);
+                        self.resolve("unexpected","",k);
                     }
                 }
             }
@@ -171,7 +180,9 @@
                 self.resolve("nullNotAllowed",e.id,e.name);
             }
             else if(type !== null && type !== bt){
-                self.resolve("unvalidType",e.id,e.name,self.typeName(bt),self.typeName(type));
+                if(!(e.usage === 'O' && type === 'U')){
+                    self.resolve("unvalidType",e.id,e.name,self.typeName(bt),self.typeName(type));
+                }
             }
             else {
                 return true;
@@ -179,21 +190,22 @@
             return false;
         };
 
-
+        // Routing params to the corresponding type check
         this.routeCheck = function (parent,type,obj,e) {
             if(type === 'S') self.checkString(obj,e);
             if(type === 'N') self.checkNumber(obj,e);
-            if(type === 'O') self.checkObject(obj,e);
+            if(type === 'O') self.checkObject(parent,obj,e);
             if(type === 'A') self.checkArray(obj,e);
 
             if(e.hasOwnProperty("custom")){
                 var str = e.custom(self.doc,parent,obj);
                 if(str !== null){
-                    errors.push(str);
+                    self.resolve("custom",e.id,str);
                 }
             }
         };
 
+        // Getting type definition
         this.getType = function (model) {
             if(model.hasOwnProperty("type")){
                 return model.type;
@@ -235,14 +247,32 @@
             }
         };
 
-        this.checkObject = function (obj,e) {
+        this.resolveChoice = function (parent,model) {
+            if(model.hasOwnProperty("choice")){
+                for(var c in model.choice){
+                    if(model.choice[c].hasOwnProperty("discriminator") && model.choice[c].discriminator(self.doc,parent)){
+                        return model.choice[c];
+                    }
+                }
+                return null;
+            }
+            else
+                return model;
+        };
+
+        this.checkObject = function (parent,obj,e) {
             var type = self.getType(e);
             var model = type.model;
-            idList.push(e.id);
-            if(model){
-                self.loopThru(obj,model);
+            if(model === null){
+                self.resolve("discriminator",e.id,e.name);
             }
-            idList.pop();
+            else {
+                idList.push(e.id);
+                if(model){
+                    self.loopThru(obj,model);
+                }
+                idList.pop();
+            }
         };
 
         this.checkArray = function (obj,e) {
@@ -289,7 +319,7 @@
     // Example Schema
     var schema = {
         config : {
-            turnOff : ["strRegExp"],
+            turnOff : [],
             ids : {
                 active : true,
                 separator : "-"
@@ -359,11 +389,28 @@
                 id : "O",
                 model : [
                     {
-                        name : "Contact ID",
-                        key : "id",
-                        id : "cId",
-                        typeRef : "idType",
-                        usage : "O"
+                        choice :[
+                            {
+                                name : "Contact ID",
+                                key : "id",
+                                id : "cId",
+                                typeRef : "idType",
+                                usage : "O",
+                                discriminator : function (doc,parent) {
+                                    return parent.type === "I"
+                                }
+                            },
+                            {
+                                name : "Contact ID",
+                                key : "id",
+                                id : "cId",
+                                typeRef : "myStr",
+                                usage : "O",
+                                discriminator : function (doc,parent) {
+                                    return parent.type === "A"
+                                }
+                            }
+                        ]
                     },
                     {
                         name : "Contact Name",
@@ -451,9 +498,269 @@
             return k+" must have at most "+max+" element but "+length+" was found";
         };
     }
+    var dt = {
+        date : {
+            relative : {
+                id : 1,
+                relativeTo : "AAAAA",
+                months : 1,
+                days : 1
+            }
+        }
+    };
+
+    var pt = {
+        patient: {
+            id: 1,
+            dob: {
+                fixed: {
+                    id: 4,
+                    date: 1298696400000
+                }
+            },
+            gender :"F"
+        }
+    };
+
+    var dtSchema = {
+        config : {
+            ids : {
+                active : true,
+                separator : "-"
+            }
+        },
+        root : [
+            {
+                id  : "pt",
+                key : "patient",
+                name: "Patient",
+                typeRef : "patient",
+                usage : "R"
+            }
+        ],
+        types : {
+            idType : {
+                id : "N",
+                options : {
+                    min : 0
+                }
+            },
+            date : {
+                id : "O",
+                model : [
+                    {
+                        choice : [
+                            {
+                                key : "fixed",
+                                name : "Fixed",
+                                id  : "fx",
+                                typeRef : "fixedDate",
+                                usage : "R",
+                                discriminator : function(doc,parent){
+                                    return !parent.hasOwnProperty("relative");
+                                }
+                            },
+                            {
+                                key : "relative",
+                                name : "Relative",
+                                id  : "rl",
+                                typeRef : "relativeDate",
+                                usage : "R",
+                                discriminator : function(doc,parent){
+                                    return !parent.hasOwnProperty("fixed");
+                                }
+                            },
+                        ]
+                    }
+                ]
+            },
+
+            fixedDate : {
+                id : "O",
+                model : [
+                    {
+                        key : "id",
+                        id : "id",
+                        name : "ID",
+                        typeRef : "idType",
+                        usage : "O"
+                    },
+                    {
+                        key : "date",
+                        id : "dt",
+                        name : "DateObj",
+                        type : {
+                            id : "N",
+                            options : {
+                                min : 0
+                            }
+                        },
+                        usage : "R"
+                    }
+                ]
+            },
+
+            relativeDate : {
+                id : "O",
+                model : [
+                    {
+                        key : "id",
+                        id : "id",
+                        name : "ID",
+                        typeRef : "idType",
+                        usage : "O"
+                    },
+                    {
+                        key : "relativeTo",
+                        id : "rlt",
+                        name : "Relative To",
+                        type : {
+                            id : "S",
+                            options : {
+                                min : 5
+                            }
+                        },
+                        usage : "R"
+                    },
+                    {
+                        key : "years",
+                        id : "y",
+                        name : "Years",
+                        type : {
+                            id : "N"
+                        },
+                        usage : "R"
+                    },
+                    {
+                        key : "months",
+                        id : "m",
+                        name : "Months",
+                        type : {
+                            id : "N"
+                        },
+                        usage : "R"
+                    },
+                    {
+                        key : "days",
+                        id : "d",
+                        name : "days",
+                        type : {
+                            id : "N"
+                        },
+                        usage : "R"
+                    }
+                ]
+            },
+
+            patient : {
+                id : "O",
+                model : [
+                    {
+                        key : "id",
+                        id : "id",
+                        name : "ID",
+                        typeRef : "idType",
+                        usage : "O"
+                    },
+                    {
+                        key : "dob",
+                        id : "dob",
+                        name : "Date Of Birth",
+                        typeRef : "date",
+                        usage : "R"
+                    },
+                    {
+                        key : "gender",
+                        id : "sx",
+                        name : "Gender",
+                        type : {
+                            id : "S",
+                            options : {
+                                min : 1,
+                                max : 1,
+                                enum : ["M","F"]
+                            }
+                        },
+                        usage : "R"
+                    }
+                ]
+            },
+
+            metaData : {
+                id : "O",
+                model : [
+                    {
+                        key : "id",
+                        id : "id",
+                        name : "ID",
+                        typeRef : "idType",
+                        usage : "O"
+                    },
+                    {
+                        key : "version",
+                        id : "vr",
+                        name : "Version",
+                        type : {
+                            id : "S"
+                        },
+                        usage : "R"
+                    },
+                    {
+                        key : "imported",
+                        id : "imp",
+                        name : "Imported",
+                        type : {
+                            id : "B"
+                        },
+                        usage : "R"
+                    },
+                    {
+                        key : "dateCreated",
+                        id : "dcr",
+                        name : "Date Of Creation",
+                        typeRef : "date",
+                        usage : "R"
+                    },
+                    {
+                        key : "dateLastUpdated",
+                        id : "dlu",
+                        name : "Date Of Last Update",
+                        typeRef : "date",
+                        usage : "R"
+                    }
+                ]
+            },
+
+            eventsList : {
+                id : "A",
+                model : {
+                    typeRef : "event"
+                },
+                usage : "O"
+            },
+
+            event  : {
+                id : "O",
+                model : [
+                    {
+                        choice : [
+                            {
+                                key : "vaccination",
+                                id  : "vxe",
+                                name : "Vaccination Event",
+                                typeRef : "vaccinationEvt",
+                                usage : "R"
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    };
 
     // Example Usage
-    var validation = new Validator(schema);
-    var errors = validation.validateDocument(ab);
+    var validation = new Validator(dtSchema);
+    var errors = validation.validateDocument(pt);
+    console.log(errors);
 })();
 
